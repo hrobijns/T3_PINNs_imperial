@@ -25,7 +25,7 @@ class PINN:
         ])
 
     def star_d_2_form(self, derivative):
-    # define hodge star d acting on a 2-form, where the input is the derivative tensor
+    # define (hodge star . d) acting on a 2-form
         output = tf.concat([
             derivative[:, 3:4] - derivative[:, 5:6],   # coefficient of dx1 (del(f_2)/del(x_3)-del(f_3)/del(x_2))
             derivative[:, 4:5] - derivative[:, 1:2],   # coefficient of dx2 (del(f_3)/del(x_1)-del(f_1)/del(x_3))
@@ -34,11 +34,11 @@ class PINN:
         return output
     
     def star_d_star_1_form(self, derivative):
-    # define d hodge star d acting on a 1-form, where the input is the derivative tensor
-        return derivative[:, 0] + derivative[:, 1] + derivative[:, 2]
+    # define (d . hodge star . d) acting on a 1-form
+        return derivative[:, 0] + derivative[:, 1] + derivative[:, 2] # this simple form can be found by working through the maths
     
     def d_0_form(self, derivative):
-    # define d acting on a 0-form, where the input is the derivative tensor
+    # define d acting on a 0-form
         output = tf.concat([
             derivative[:, 0:1],  # coefficient of dx1
             derivative[:, 1:2],  # coefficient of dx2
@@ -67,7 +67,7 @@ class PINN:
         RH_term, LH_term = self.calculate_PDE(x_collocation)
         loss = tf.reduce_mean(tf.square(RH_term + LH_term))
         norm_factor = tf.reduce_sum(tf.abs(self.model(x_collocation)))
-        normalised_loss = loss / norm_factor
+        normalised_loss = loss / norm_factor # this term is currently here so it doesn't learn zero
         return normalised_loss
 
     def train(self, x_collocation, epochs, learning_rate):
@@ -86,7 +86,7 @@ class PINN:
         return outputs
 
 if __name__ == '__main__': 
-    # generate collocation points within a unit cube [0, 1] x [0, 1] x [0, 1]
+    # generate collocation points within a unit cube
     num_samples = 1000
     x_collocation = np.random.uniform(low=0, high=1, size=(num_samples, 3))
     x_collocation = tf.convert_to_tensor(x_collocation, dtype=tf.float64)
@@ -97,12 +97,12 @@ if __name__ == '__main__':
     # train the model
     pinn.train(x_collocation, epochs = 1000, learning_rate = 0.001)
 
-    # evaluate the model on specific points to check for periodicity
+    # periodicity verification
     inputs = np.array([[1, 1, 1], [2, 2, 2]], dtype=np.float64)
     outputs = pinn.evaluate(inputs)
     print(f"Outputs for [1, 1, 1] and [2, 2, 2]:\n{outputs.numpy()}")
 
-    # generate 5 random inputs to test if the functions learnt are constants
+    # verify whether it has learnt a constant
     random_inputs = np.random.uniform(low=0, high=1, size=(5, 3))
     random_inputs_tensor = tf.convert_to_tensor(random_inputs, dtype=tf.float64)
     random_outputs = pinn.evaluate(random_inputs_tensor).numpy()
