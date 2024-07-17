@@ -108,4 +108,4 @@ if __name__ == '__main__':
     random_outputs = pinn.evaluate(random_inputs_tensor).numpy()
     resulting_arrays = random_outputs / random_inputs
     print("Resulting arrays from element-wise division of outputs by inputs:")
-    print(resulting_arrays)
+    print(resulting_arrays) # each element across the arrays (i.e. the second element in each) should be similar if it has learnt a constant
