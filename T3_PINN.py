@@ -1,6 +1,8 @@
 import numpy as np
 import tensorflow as tf
 from tensorflow.keras.layers import Layer
+import matplotlib.pyplot as plt
+from mpl_toolkits.mplot3d import Axes3D
 
 # set the floating point precision
 tf.keras.backend.set_floatx('float64')
@@ -25,40 +27,42 @@ class PINN:
         ])
 
     def star_d_2_form(self, derivative):
-    # define (hodge star . d) acting on a 2-form
+        # Define (hodge star . d) acting on a 2-form
         output = tf.concat([
-            derivative[:, 3:4] - derivative[:, 5:6],   # coefficient of dx1 (del(f_2)/del(x_3)-del(f_3)/del(x_2))
-            derivative[:, 4:5] - derivative[:, 1:2],   # coefficient of dx2 (del(f_3)/del(x_1)-del(f_1)/del(x_3))
-            derivative[:, 0:1] - derivative[:, 2:3]    # coefficient of dx3 (del(f_1)/del(x_2)-del(f_2)/del(x_1))
+            tf.expand_dims(derivative[:, 5] - derivative[:, 7], axis=1),  # coefficient of dx1 (del(f_2)/del(x_3) - del(f_3)/del(x_2))
+            tf.expand_dims(derivative[:, 6] - derivative[:, 2], axis=1),  # coefficient of dx2 (del(f_3)/del(x_1) - del(f_1)/del(x_3))
+            tf.expand_dims(derivative[:, 1] - derivative[:, 3], axis=1)   # coefficient of dx3 (del(f_1)/del(x_2) - del(f_2)/del(x_1))
         ], axis=1)
         return output
     
     def star_d_star_1_form(self, derivative):
     # define (d . hodge star . d) acting on a 1-form
-        return derivative[:, 0] + derivative[:, 1] + derivative[:, 2] # this simple form can be found by working through the maths
+        return tf.expand_dims(derivative[:, 0] + derivative[:, 4] + derivative[:, 8], axis=1) # this simple form can be found by working through the maths
     
-    def d_0_form(self, derivative):
-    # define d acting on a 0-form
-        output = tf.concat([
-            derivative[:, 0:1],  # coefficient of dx1
-            derivative[:, 1:2],  # coefficient of dx2
-            derivative[:, 2:3]   # coefficient of dx3
-        ], axis=1)
-        return output
 
     def calculate_PDE(self, x):
         with tf.GradientTape(persistent=True) as tape:
             tape.watch(x)
             u = self.model(x)
-            du_dx = tape.gradient(u, x)
+            du_dx = tf.concat([
+            tape.gradient(u[:, 0], x), 
+            tape.gradient(u[:, 1], x),  
+            tape.gradient(u[:, 2], x),  
+        ], axis=1)
             
             u_prime = self.star_d_2_form(du_dx)
-            du_prime_dx = tape.gradient(u_prime, x)
+            
+            du_prime_dx = tf.concat([
+            tape.gradient(u_prime[:, 0], x), 
+            tape.gradient(u_prime[:, 1], x),  
+            tape.gradient(u_prime[:, 2], x),  
+        ], axis=1)
+            
             RH_term = self.star_d_2_form(du_prime_dx)
             
             alpha = self.star_d_star_1_form(du_dx)
             alpha_grad = tape.gradient(alpha, x)
-            LH_term = self.d_0_form(alpha_grad)
+            LH_term = alpha_grad
 
         del tape    
         return RH_term, LH_term
@@ -85,6 +89,30 @@ class PINN:
         outputs = self.model(inputs)
         return outputs
 
+    def plot_learned_1_form(self):
+        fig = plt.figure()
+        ax = fig.add_subplot(111, projection='3d')
+
+        # Make the grid
+        x, y, z = np.meshgrid(np.arange(0, 1.1, 0.2),
+                              np.arange(0, 1.1, 0.2),
+                              np.arange(0, 1.1, 0.2))
+        grid_points = np.stack([x.ravel(), y.ravel(), z.ravel()], axis=-1)
+        grid_tensor = tf.convert_to_tensor(grid_points, dtype=tf.float64)
+
+        # Evaluate the model
+        u = self.evaluate(grid_tensor).numpy()
+
+        # Reshape to match grid
+        u1 = u[:, 0].reshape(x.shape)
+        u2 = u[:, 1].reshape(x.shape)
+        u3 = u[:, 2].reshape(x.shape)
+
+        ax.quiver(x, y, z, u1, u2, u3, length=0.1, normalize=True)
+
+        plt.show()
+
+
 if __name__ == '__main__': 
     # generate collocation points within a unit cube
     num_samples = 1000
@@ -106,6 +134,10 @@ if __name__ == '__main__':
     random_inputs = np.random.uniform(low=0, high=1, size=(5, 3))
     random_inputs_tensor = tf.convert_to_tensor(random_inputs, dtype=tf.float64)
     random_outputs = pinn.evaluate(random_inputs_tensor).numpy()
-    resulting_arrays = random_outputs / random_inputs
-    print("Resulting arrays from element-wise division of outputs by inputs:")
-    print(resulting_arrays) # each element across the arrays (i.e. the second element in each) should be similar if it has learnt a constant
+    print("Random inputs:")
+    print(random_inputs) 
+    print("Random outputs:")
+    print(random_outputs)
+
+    # plot a visualisation
+    pinn.plot_learned_1_form()
