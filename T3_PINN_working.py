@@ -1,6 +1,8 @@
 import numpy as np
 import tensorflow as tf
 from tensorflow.keras.layers import Layer
+import matplotlib.pyplot as plt
+from mpl_toolkits.mplot3d import Axes3D
 
 # set the floating point precision
 tf.keras.backend.set_floatx('float64')
@@ -87,6 +89,30 @@ class PINN:
         outputs = self.model(inputs)
         return outputs
 
+    def plot_learned_1_form(self):
+        fig = plt.figure()
+        ax = fig.add_subplot(111, projection='3d')
+
+        # Make the grid
+        x, y, z = np.meshgrid(np.arange(0, 1.1, 0.2),
+                              np.arange(0, 1.1, 0.2),
+                              np.arange(0, 1.1, 0.2))
+        grid_points = np.stack([x.ravel(), y.ravel(), z.ravel()], axis=-1)
+        grid_tensor = tf.convert_to_tensor(grid_points, dtype=tf.float64)
+
+        # Evaluate the model
+        u = self.evaluate(grid_tensor).numpy()
+
+        # Reshape to match grid
+        u1 = u[:, 0].reshape(x.shape)
+        u2 = u[:, 1].reshape(x.shape)
+        u3 = u[:, 2].reshape(x.shape)
+
+        ax.quiver(x, y, z, u1, u2, u3, length=0.1, normalize=True)
+
+        plt.show()
+
+
 if __name__ == '__main__': 
     # generate collocation points within a unit cube
     num_samples = 1000
@@ -112,3 +138,6 @@ if __name__ == '__main__':
     print(random_inputs) 
     print("Random outputs:")
     print(random_outputs)
+
+    # plot a visualisation
+    pinn.plot_learned_1_form()
