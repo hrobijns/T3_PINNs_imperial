@@ -4,11 +4,11 @@ from tensorflow.keras.layers import Layer
 import matplotlib.pyplot as plt
 from mpl_toolkits.mplot3d import Axes3D
 
-###########################################################################
+###################################################################################################
 # set the floating point precision
 tf.keras.backend.set_floatx('float64')
 
-###########################################################################
+###################################################################################################
 # define a trig activitation layer - this enforces periodicity, 
 # meaning the solution lies on the manifold T^3, as requested.
 
@@ -19,7 +19,7 @@ class TrigActivation(Layer):
     def call(self, inputs):
         return tf.concat([tf.sin(2*np.pi*inputs), tf.cos(2*np.pi*inputs)], axis=1)
 
-###########################################################################
+###################################################################################################
 # define the architecture of the NN 
 
 class PINN:
@@ -33,7 +33,7 @@ class PINN:
             tf.keras.layers.Dense(units=3) # various hidden layers
         ])
         
-###########################################################################
+###################################################################################################
 # define the metric, with an x-dependance
     def g(self, x):
         g = np.array([
@@ -43,7 +43,7 @@ class PINN:
         ])
         return tf.convert_to_tensor(g, dtype=tf.float64)
 
-###########################################################################
+###################################################################################################
 # define loss function, through defining hodge star and exterior derivative operators
 
     def evaluate(self, inputs): 
@@ -70,7 +70,6 @@ class PINN:
                           product[:, 1:2], # coefficient of dx2
                           product[:, 2:3]], # coefficient of dx3
                           axis=1)
-    
             
         elif rank_acting_on == 3: # Hodge star acting on a 3-form: output is a 0-form
             return (1/sqrt_det_metric) * inputs 
@@ -123,16 +122,16 @@ class PINN:
             RH_term = self.hodge_star(y,x, rank_acting_on=2)
 
         del tape
-        return LH_term + RH_term
+        return LH_term + RH_term # sum of these terms is the laplacian of the one-form
 
     def loss(self, x_collocation):
         PDE_error = self.calculate_PDE_error(x_collocation)
-        loss = tf.reduce_mean(tf.square(PDE_error))
+        loss = tf.reduce_mean(tf.square(PDE_error)) # we want laplacian of the one-form to be zero to solve PDE
         norm_factor = tf.reduce_sum(tf.abs(self.model(x_collocation)))
         normalised_loss = loss / norm_factor # this is here so that the NN does not learn zero
         return normalised_loss
 
-###########################################################################
+###################################################################################################
 # train network
 
     def train(self, x_collocation, epochs, learning_rate):
@@ -145,7 +144,7 @@ class PINN:
             if epoch % 100 == 0:
                 print(f"Epoch {epoch}: Loss = {normalised_loss.numpy()}")
 
-###########################################################################
+###################################################################################################
 #  simple plot on T^3 to visualise results
 
     def plot_learned_1_form(self):
@@ -168,7 +167,7 @@ class PINN:
 
         plt.show()
 
-###########################################################################
+###################################################################################################
 #  running the program
 
 if __name__ == '__main__':
