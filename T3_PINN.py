@@ -34,14 +34,14 @@ class PINN:
         ])
         
 ###########################################################################
-# define the metric
-
+# define the metric, with an x-dependance
+    def g(self, x):
         g = np.array([
             [1.0, 0.0, 0.0],
             [0.0, 1.0, 0.0],
             [0.0, 0.0, 1.0]
         ])
-        self.g = tf.convert_to_tensor(g, dtype=tf.float64)
+        return tf.convert_to_tensor(g, dtype=tf.float64)
 
 ###########################################################################
 # define loss function, through defining hodge star and exterior derivative operators
@@ -52,10 +52,10 @@ class PINN:
         outputs = self.model(inputs)
         return outputs
     
-    def hodge_star(self, inputs, rank_acting_on):
+    def hodge_star(self, inputs, x, rank_acting_on):
     # define the Hodge operator, defined differently depending on which rank form it is acting on 
-        sqrt_det_metric = tf.sqrt(tf.linalg.det(self.g))
-        inv_metric = tf.linalg.inv(self.g)
+        sqrt_det_metric = tf.sqrt(tf.linalg.det(self.g(x)))
+        inv_metric = tf.linalg.inv(self.g(x))
         
         if rank_acting_on == 1: # Hodge star acting on a 1-form: output is a 2-form
             product = sqrt_det_metric * tf.matmul(inputs, inv_metric)
@@ -107,16 +107,16 @@ class PINN:
             u = self.model(x)
             
             # 'LH_term': d*d* acting on the 1-form
-            y = self.hodge_star(u, rank_acting_on=1)
+            y = self.hodge_star(u, x, rank_acting_on=1)
             y = self.exterior_derivative(y, x, tape, rank_acting_on=2)
-            y = self.hodge_star(y, rank_acting_on=3)
+            y = self.hodge_star(y, x, rank_acting_on=3)
             LH_term = self.exterior_derivative(y, x, tape, rank_acting_on=0)
 
             # 'RH_term': *d*d acting on the 1-form
             y = self.exterior_derivative(u, x, tape, rank_acting_on=1)
-            y = self.hodge_star(y, rank_acting_on=2)
+            y = self.hodge_star(y, x, rank_acting_on=2)
             y = self.exterior_derivative(y, x, tape, rank_acting_on=1)
-            RH_term = self.hodge_star(y, rank_acting_on=2)
+            RH_term = self.hodge_star(y,x, rank_acting_on=2)
 
         del tape
         return LH_term + RH_term
