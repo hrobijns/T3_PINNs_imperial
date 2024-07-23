@@ -37,8 +37,8 @@ class PINN:
 # define the metric, with an x-dependance
     def g(self, x):
         g = np.array([
-            [1.0, 0.0, 0.0],
             [0.0, 1.0, 0.0],
+            [1.0, 0.0, 0.0],
             [0.0, 0.0, 1.0]
         ])
         return tf.convert_to_tensor(g, dtype=tf.float64)
@@ -54,7 +54,7 @@ class PINN:
     
     def hodge_star(self, inputs, x, rank_acting_on):
     # define the Hodge operator, defined differently depending on which rank form it is acting on 
-        sqrt_det_metric = tf.sqrt(tf.linalg.det(self.g(x)))
+        sqrt_det_metric = tf.sqrt(tf.abs(tf.linalg.det(self.g(x))))
         inv_metric = tf.linalg.inv(self.g(x))
         
         if rank_acting_on == 1: # Hodge star acting on a 1-form: output is a 2-form
