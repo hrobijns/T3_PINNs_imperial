@@ -191,6 +191,7 @@ if __name__ == '__main__':
     print(random_inputs)
     print("Random outputs:")
     print(random_outputs)
+    print("(these 5 output vectors should be pretty much the same if the identity metric is used)")
 
     # plot results
     pinn.plot_learned_1_form()
