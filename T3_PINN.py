@@ -65,11 +65,15 @@ class PINN:
                           axis=1)
         
         elif rank_acting_on == 2: # Hodge star acting on a 2-form: output is a 1-form
-            # STILL NEEDS TO BE UPDATED
-            return inputs
+            product = sqrt_det_metric * tf.matmul(inputs, inv_metric)
+            return tf.concat([product[:, 0:1], # coefficient of dx1
+                          product[:, 1:2], # coefficient of dx2
+                          product[:, 2:3]], # coefficient of dx3
+                          axis=1)
+    
             
         elif rank_acting_on == 3: # Hodge star acting on a 3-form: output is a 0-form
-            return sqrt_det_metric * inputs 
+            return (1/sqrt_det_metric) * inputs 
 
     def exterior_derivative(self, inputs, x, tape, rank_acting_on):
     # define the exterior derivative, defined differently depending on which rank form it is acting on
