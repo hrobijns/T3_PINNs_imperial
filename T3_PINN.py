@@ -6,7 +6,7 @@ from mpl_toolkits.mplot3d import Axes3D
 
 ###################################################################################################
 # set the floating point precision
-tf.keras.backend.set_floatx('float64')
+tf.keras.backend.set_floatx('float32')
 
 ###################################################################################################
 # define a trig activitation layer - this enforces periodicity, 
@@ -41,7 +41,7 @@ class PINN:
             [1.0, 0.0, 0.0],
             [0.0, 1.0, 0.0],
             [0.0, 0.0, 1.0]
-        ], dtype=tf.float64)
+        ], dtype=tf.float32)
         return g
 
 ###################################################################################################
@@ -49,7 +49,7 @@ class PINN:
 
     def evaluate(self, inputs): 
     # function which passes an input through the model
-        inputs = tf.convert_to_tensor(inputs, dtype=tf.float64)
+        inputs = tf.convert_to_tensor(inputs, dtype=tf.float32)
         outputs = self.model(inputs)
         return outputs
     
@@ -155,7 +155,7 @@ class PINN:
                               np.arange(0, 1.1, 0.2),
                               np.arange(0, 1.1, 0.2))
         grid_points = np.stack([x.ravel(), y.ravel(), z.ravel()], axis=-1)
-        grid_tensor = tf.convert_to_tensor(grid_points, dtype=tf.float64)
+        grid_tensor = tf.convert_to_tensor(grid_points, dtype=tf.float32)
 
         u = self.evaluate(grid_tensor).numpy()
 
@@ -175,20 +175,20 @@ if __name__ == '__main__':
     # generate collocation points
     num_samples = 100
     x_collocation = np.random.uniform(low=0, high=1, size=(num_samples, 3))
-    x_collocation = tf.convert_to_tensor(x_collocation, dtype=tf.float64)
+    x_collocation = tf.convert_to_tensor(x_collocation, dtype=tf.float32)
 
     # initialise and train network
     pinn = PINN()
     pinn.train(x_collocation, epochs=101, learning_rate=0.001)
     
     # check for periodicity (should always be true)
-    inputs = np.array([[1, 1, 1], [2, 2, 2]], dtype=np.float64)
+    inputs = np.array([[1, 1, 1], [2, 2, 2]], dtype=np.float32)
     outputs = pinn.evaluate(inputs)
     print(f"Outputs for [1, 1, 1] and [2, 2, 2]:\n{outputs.numpy()} (these should be exactly the same if the NN has learnt a periodic solution)")
 
     # check for constant output (should be true for the identity metric)
     random_inputs = np.random.uniform(low=0, high=1, size=(5, 3))
-    random_inputs_tensor = tf.convert_to_tensor(random_inputs, dtype=tf.float64)
+    random_inputs_tensor = tf.convert_to_tensor(random_inputs, dtype=tf.float32)
     random_outputs = pinn.evaluate(random_inputs_tensor).numpy()
     print("Random inputs:")
     print(random_inputs)
