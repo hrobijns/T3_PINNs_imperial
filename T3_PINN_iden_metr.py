@@ -2,7 +2,6 @@ import numpy as np
 import tensorflow as tf
 from tensorflow.keras.layers import Layer
 import matplotlib.pyplot as plt
-from mpl_toolkits.mplot3d import Axes3D
 
 # set the floating point precision
 tf.keras.backend.set_floatx('float64')
