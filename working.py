@@ -34,13 +34,39 @@ class PINN:
         
 ###################################################################################################
 # define the metric, with an x-dependance
-    def g(self, x):
-        x = x[0] # reduces input from shape (1,3) to (3,) to allow it to fit into metric matrix
+    def R(self, r):
+        r = tf.convert_to_tensor(r, dtype=tf.float32)
+        return tf.where(r < 1, r,
+                       tf.where(r <= 2, tf.constant(1.0, dtype=tf.float32),
+                                 r - 1))
+    
+    def g(self,x):
+        x = x[0]
+        r = tf.sqrt(x[0]**2 + x[1]**2 + x[2]**2)
+        theta = tf.math.atan2(r, x[2])
+        phi = tf.math.atan2(x[1], x[0])
+        #Rr = self.R(r)
+        Rr = r
+        #g11 =  tf.square(tf.cos(phi))*tf.square(tf.sin(theta)) + tf.square((tf.sin(theta)*tf.sin(phi)) * Rr) + tf.square((tf.cos(theta)*tf.cos(phi)) * Rr)
+        #print(g11)
+        #g12 = tf.square(tf.sin(theta))*tf.sin(phi)*tf.cos(phi) + tf.square(tf.cos(theta) * Rr)*tf.sin(phi)*tf.cos(phi) - tf.square(tf.sin(theta) * Rr)*tf.sin(phi)*tf.cos(phi)
+        #g13 = tf.cos(theta)*tf.sin(theta)*tf.cos(phi) - tf.square(Rr)*tf.sin(theta)*tf.cos(theta)*tf.cos(phi)
+        #g22 = tf.square(tf.sin(phi))*tf.square(tf.sin(theta)) + tf.square((tf.cos(theta)*tf.sin(phi)) * Rr) + tf.square((tf.sin(theta)*tf.cos(phi)) * Rr)
+        #g23 = tf.cos(theta)*tf.sin(theta)*tf.sin(phi) - tf.square(Rr)*tf.sin(theta)*tf.cos(theta)*tf.sin(phi)
+        #g33 = tf.square(tf.cos(theta))+ tf.square(Rr*tf.sin(theta))
+        g11 = 1.0
+        g12 = 0.0
+        g13 = 0.0
+        g23 = 0.0
+        g22 = tf.square(r)
+        g33 = tf.square(r*tf.sin(theta))
+
         g = tf.convert_to_tensor([
-            [1.0, 0.0, 0.0],
-            [0.0, 1.0, 0.0],
-            [0.0, 0.0, 1.0]
+            [g11, g12, g13],
+            [g12, g22, g23],
+            [g13, g23, g33]
         ], dtype=tf.float32)
+
         return g
 
 ###################################################################################################
@@ -186,7 +212,7 @@ if __name__ == '__main__':
 
     # initialise and train network
     pinn = PINN()
-    pinn.train(x_collocation, epochs=1000, learning_rate=0.001)
+    pinn.train(x_collocation, epochs=10000, learning_rate=0.001)
     
     # check for periodicity (should always be true)
     inputs = np.array([[1, 1, 1], [2, 2, 2]], dtype=np.float32)
