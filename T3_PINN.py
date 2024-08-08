@@ -52,12 +52,12 @@ class PINN:
         outputs = self.model(inputs)
         return outputs
     
-    def hodge_star(self, inputs, x, rank_acting_on):
+    def hodge_star(self, inputs, rank_acting_on, g):
     # define the Hodge operator, defined differently depending on which rank form it is acting on 
-        sqrt_det_metric = tf.sqrt(tf.abs(tf.linalg.det(self.g(x))))
-        inv_metric = tf.linalg.inv(self.g(x))
-        
+  
         if rank_acting_on == 1: # Hodge star acting on a 1-form: output is a 2-form
+            sqrt_det_metric = tf.sqrt(tf.abs(tf.linalg.det(g)))
+            inv_metric = tf.linalg.inv(g)
             product = sqrt_det_metric * tf.matmul(inputs, inv_metric)
             return tf.concat([product[:, 0:1], # coefficient of dx2 ^ dx3
                           product[:, 1:2], # coefficient of dx3 ^ dx1
@@ -65,6 +65,8 @@ class PINN:
                           axis=1)
         
         elif rank_acting_on == 2: # Hodge star acting on a 2-form: output is a 1-form
+            sqrt_det_metric = tf.sqrt(tf.abs(tf.linalg.det(g)))
+            inv_metric = tf.linalg.inv(g)
             product = sqrt_det_metric * tf.matmul(inputs, inv_metric)
             return tf.concat([product[:, 0:1], # coefficient of dx1
                           product[:, 1:2], # coefficient of dx2
@@ -72,6 +74,7 @@ class PINN:
                           axis=1)
             
         elif rank_acting_on == 3: # Hodge star acting on a 3-form: output is a 0-form
+            sqrt_det_metric = tf.sqrt(tf.abs(tf.linalg.det(g)))
             return (1/sqrt_det_metric) * inputs 
 
     def exterior_derivative(self, inputs, x, tape, rank_acting_on):
@@ -102,30 +105,30 @@ class PINN:
 
             return tf.expand_dims(derivatives[:, 0] - derivatives[:, 4] + derivatives[:, 8], axis=1)
 
-    def calculate_PDE_error(self, x):
+    def calculate_PDE_error(self, x, tape):
     # function which calculates overall laplacian of the 1-form, as the sum of two terms
         x = tf.expand_dims(x, axis=0)
-        with tf.GradientTape(persistent=True) as tape:
-            tape.watch(x)
-            u = self.model(x)
-                
-            # 'LH_term': d*d* acting on the 1-form
-            y = self.hodge_star(u, x, rank_acting_on=1)
-            y = self.exterior_derivative(y, x, tape, rank_acting_on=2)
-            y = self.hodge_star(y, x, rank_acting_on=3)
-            LH_term = self.exterior_derivative(y, x, tape, rank_acting_on=0)
+        tape.watch(x)
+        u = self.model(x)
+        metric = self.g(x)        
+        # 'LH_term': d*d* acting on the 1-form
+        y = self.hodge_star(u, rank_acting_on=1, g=metric)
+        y = self.exterior_derivative(y, x, tape, rank_acting_on=2)
+        y = self.hodge_star(y, rank_acting_on=3, g=metric)
+        LH_term = self.exterior_derivative(y, x, tape, rank_acting_on=0)
 
-            # 'RH_term': *d*d acting on the 1-form
-            y = self.exterior_derivative(u, x, tape, rank_acting_on=1)
-            y = self.hodge_star(y, x, rank_acting_on=2)
-            y = self.exterior_derivative(y, x, tape, rank_acting_on=1)
-            RH_term = self.hodge_star(y, x, rank_acting_on=2)
+        # 'RH_term': *d*d acting on the 1-form
+        y = self.exterior_derivative(u, x, tape, rank_acting_on=1)
+        y = self.hodge_star(y, rank_acting_on=2, g=metric)
+        y = self.exterior_derivative(y, x, tape, rank_acting_on=1)
+        RH_term = self.hodge_star(y, rank_acting_on=2, g=metric)
 
-        del tape
-        return LH_term + RH_term # sum of these terms is the laplacian of the one-form
+        sum = LH_term + RH_term # sum of these terms is the laplacian of the one-form
+        return tf.reduce_sum(tf.square(sum)) # return mean-squared error
+      
 
-    def loss(self, x_collocation):
-        PDE_errors = tf.vectorized_map(self.calculate_PDE_error, x_collocation)
+    def loss(self, x_collocation, tape):
+        PDE_errors = tf.vectorized_map(lambda x: self.calculate_PDE_error(x, tape), x_collocation)
         norm_factor = tf.reduce_sum(tf.abs(self.model(x_collocation)))
         loss = tf.reduce_mean(tf.square(PDE_errors)) / norm_factor
         return loss
@@ -133,13 +136,18 @@ class PINN:
 ###################################################################################################
 # train network
 
+    @tf.function
+    def compute_loss_and_gradients(self, x_collocation):
+        with tf.GradientTape(persistent=True) as tape:
+            normalised_loss = self.loss(x_collocation, tape)
+        grads = tape.gradient(normalised_loss, self.model.trainable_variables)
+        return normalised_loss, grads
+
     def train(self, x_collocation, epochs, learning_rate):
         optimizer = tf.keras.optimizers.Adam(learning_rate)
         for epoch in range(epochs):
-            with tf.GradientTape() as tape:
-                normalised_loss = self.loss(x_collocation)
-                grads = tape.gradient(normalised_loss, self.model.trainable_variables)
-                optimizer.apply_gradients(zip(grads, self.model.trainable_variables))
+            normalised_loss, grads = self.compute_loss_and_gradients(x_collocation)
+            optimizer.apply_gradients(zip(grads, self.model.trainable_variables))
             if epoch % 5 == 0:
                 print(f"Epoch {epoch}: Loss = {normalised_loss.numpy()}")
 
@@ -172,13 +180,13 @@ class PINN:
 if __name__ == '__main__':
     
     # generate collocation points
-    num_samples = 100
+    num_samples = 1000
     x_collocation = np.random.uniform(low=0, high=1, size=(num_samples, 3))
     x_collocation = tf.convert_to_tensor(x_collocation, dtype=tf.float32)
 
     # initialise and train network
     pinn = PINN()
-    pinn.train(x_collocation, epochs=101, learning_rate=0.001)
+    pinn.train(x_collocation, epochs=1000, learning_rate=0.001)
     
     # check for periodicity (should always be true)
     inputs = np.array([[1, 1, 1], [2, 2, 2]], dtype=np.float32)
