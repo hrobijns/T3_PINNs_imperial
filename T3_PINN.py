@@ -37,10 +37,11 @@ class PINN:
     def g(self, x):
         x = x[0] # reduces input from shape (1,3) to (3,) to allow it to fit into metric matrix
         g = tf.convert_to_tensor([
-            [1.0, 0.0, 0.0],
-            [0.0, 1.0, 0.0],
-            [0.0, 0.0, 1.0]
+            [1.0+4*tf.sin(x[1])/2 +10*tf.sin(x[2])/4, 0.0, 0.0],
+            [0.0, 1.0+tf.sin(x[0])/2 +tf.sin(x[2])/4, 0.0],
+            [0.0, 0.0, 1.0+tf.sin(x[0])/2 +tf.sin(x[1])/2]
         ], dtype=tf.float32)
+        
         return g
 
 ###################################################################################################
@@ -175,6 +176,44 @@ class PINN:
         plt.show()
 
 ###################################################################################################
+#  simple check for zeroes
+
+    def find_zero_vector(self, num_points=1e6):
+        # generate random points within the unit cube
+        random_points = np.random.uniform(low=0, high=1, size=(int(num_points), 3))
+        random_points_tensor = tf.convert_to_tensor(random_points, dtype=tf.float32)
+        
+        def calculate_metric_norm(x):
+            x = tf.expand_dims(x, axis=0)  # adjust shape to match the metric function input
+            g = self.g(x)  # get the metric tensor for the single point
+            
+            # evaluate the model on these points
+            u = self.evaluate(x)[0]  # get the output vector (1-form)
+            
+            # reshape u to be a column vector
+            u = tf.reshape(u, (3, 1))
+            
+            # calculate the metric norm using g_ij u^i u^j
+            metric_norm_squared = tf.matmul(tf.matmul(tf.transpose(u), g), u)
+            metric_norm = tf.sqrt(metric_norm_squared)
+            
+            # return a scalar
+            return tf.squeeze(metric_norm)
+
+        # calculate norms using vectorized_map for speed
+        norms = tf.vectorized_map(calculate_metric_norm, random_points_tensor).numpy()
+
+        # check if any norm is close to zero
+        zero_vector_indices = np.where(norms < 1e-3)[0]
+        
+        if len(zero_vector_indices) > 0:
+            print("Found zero vectors! Yipeee")
+        else:
+            print("No zero vectors found. :( Boohoo")
+        
+        print("Smallest norm: " + str(np.min(norms)))
+
+###################################################################################################
 #  running the program
 
 if __name__ == '__main__':
@@ -205,3 +244,6 @@ if __name__ == '__main__':
 
     # plot results
     pinn.plot_learned_1_form()
+
+    # check for zeroes
+    pinn.find_zero_vector()
