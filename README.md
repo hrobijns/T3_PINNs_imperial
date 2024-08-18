@@ -5,6 +5,9 @@ Summer project in collaboration with Meg Dearden-Hellawell, supervised by Daniel
 ##### requirements.txt:
 - text file containing required software to run files in this repository.
 
+##### report.pdf:
+- write-up of the project.
+
 ### Pre-project work:
 
 ##### simple_PINN.py:
