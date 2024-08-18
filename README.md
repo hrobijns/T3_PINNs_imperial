@@ -27,4 +27,4 @@ Does there exist a metric on the 3-dimensional torus T<sup>3</sup> such that eve
 
 ## References:
 (1) [Raissi et al., 2017, *Physics Informed Deep Learning (Part I): Data-driven Solutions of Nonlinear Partial Differential Equations*](https://arxiv.org/abs/1711.10561) <br/>
-(2) [Raissi et al., 2017, *Harmonic forms under metric and topological perturbations*](https://www.researchgate.net/publication/34310555_Harmonic_forms_under_metric_and_topological_perturbations)
+(2) [Kerofsky, 1995, *Harmonic forms under metric and topological perturbations*](https://www.researchgate.net/publication/34310555_Harmonic_forms_under_metric_and_topological_perturbations)
