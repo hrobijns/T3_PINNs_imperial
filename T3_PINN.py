@@ -38,23 +38,21 @@ class PINN:
 
     def R(self, r):
         r = tf.convert_to_tensor(r, dtype=tf.float64)
-        
-        # Kerofsky's function
         '''
-        return tf.where(r < 1, r,  
-                tf.where(r <= 2, tf.constant(1.0, dtype=tf.float64),  
-                    1.0 + (r - 2) 
+        # Kerofsky's R(r)
+        return tf.where(r < 0.4, r,  
+                tf.where(r <= 0.7, tf.constant(0.4, dtype=tf.float64),  
+                    r - 0.3
                 )
             )
         '''
-
         # should learn constants for a linear function of r
-        # return r 
+        return r 
 
     def g(self,x):
         x = x[0]
 
-        r = tf.sqrt(x[0]**2 + x[1]**2 + x[2]**2)
+        r = tf.sqrt((x[0]-0.5)**2 + (x[1]-0.5)**2 + (x[2]-0.5)**2)
         theta = tf.math.atan2(r, x[2])
         phi = tf.math.atan2(x[1], x[0])
         Rr = self.R(r)
@@ -264,7 +262,7 @@ class PINN:
         print("Smallest norm found after minimization: " + str(min_norm_final))
 
 ###################################################################################################
-#  running the program
+# running the program
 
 if __name__ == '__main__':
     
