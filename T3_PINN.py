@@ -273,7 +273,8 @@ if __name__ == '__main__':
 
     # initialise and train network
     pinn = PINN()
-    pinn.train(x_collocation, epochs=500, learning_rate=0.001)
+    pinn.train(x_collocation, epochs=50
+               0, learning_rate=0.001)
     
     # check for periodicity (should always be true)
     inputs = np.array([[1, 1, 1], [2, 2, 2]], dtype=np.float64)
