@@ -2,7 +2,7 @@ import numpy as np
 import tensorflow as tf
 from tensorflow.keras.layers import Layer
 import matplotlib.pyplot as plt
-from scipy.optimize import minimize
+from scipy.optimize import differential_evolution
 
 ###################################################################################################
 # set the floating point precision
@@ -45,13 +45,13 @@ class PINN:
     def g(self, x):
         x = x[0]
 
-        r = tf.sqrt((x[0]-0.5)**2 + (x[1]-0.5)**2 + (x[2]-0.5)**2)
+        r = tf.sqrt(x[0]**2 + x[1]**2 + x[2]**2)
 
         # define the g function based on the condition of r using tf.cond
         if r < 1:
-            a = x[0]-0.5
-            b = x[1]-0.5
-            c = x[2]-0.5
+            a = x[0]
+            b = x[1]
+            c = x[2]
 
             r = tf.sqrt(a**2 + b**2 + c**2)
             theta = tf.math.atan2(r, c)
@@ -195,18 +195,17 @@ class PINN:
 ###################################################################################################
 #  simple plot on T^3 to visualise results
 
-    def plot_learned_1_form(self):
+    def plot_learned_1_form(self, point):
         fig = plt.figure()
         ax = fig.add_subplot(111, projection='3d')
 
-        # Make the grid
-        x, y, z = np.meshgrid(np.arange(0, 3.3, 0.6),
-                              np.arange(0, 3.3, 0.6),
-                              np.arange(0, 3.3, 0.6))
+        # make the grid
+        x, y, z = np.meshgrid(np.arange(3.2, 3.2, 1),
+                              np.arange(3.2, 3.2, 1),
+                              np.arange(3.2, 3.2, 1))
         grid_points = np.stack([x.ravel(), y.ravel(), z.ravel()], axis=-1)
         grid_tensor = tf.convert_to_tensor(grid_points, dtype=tf.float64)
 
-        # Evaluate the model
         u = self.evaluate(grid_tensor).numpy()
 
         # Reshape to match grid
@@ -215,42 +214,15 @@ class PINN:
         u3 = u[:, 2].reshape(x.shape)*0.2
         ax.quiver(x, y, z, u1, u2, u3, normalize=False)
 
+        ax.scatter(point[0], point[1], point[2], color='red', s=10)
+        
         plt.show()
 
 ###################################################################################################
 # simple check for zeroes: first a random check, then minimise from there.
 
-    def find_zero_vector(self, num_points=1e6):
-        # generate random points within the unit cube
-        random_points = np.random.uniform(low=0, high=1, size=(int(num_points), 3))
-        random_points_tensor = tf.convert_to_tensor(random_points, dtype=tf.float64)
-        
-        # function to calculate the metric norm
-        def calculate_metric_norm(x):
-            x = tf.expand_dims(x, axis=0)  # adjust shape to match the metric function input
-            g = self.g(x)  # get the metric tensor for the single point
-            u = self.evaluate(x)[0]  # get the output vector (1-form)
-            u = tf.reshape(u, (3, 1)) # reshape
-            
-            # calculate the metric norm using g_ij u^i u^j
-            metric_norm_squared = tf.matmul(tf.matmul(tf.transpose(u), g), u)
-            metric_norm = tf.sqrt(metric_norm_squared)
-            return tf.squeeze(metric_norm) # return a scalar
-        
-        norms = tf.vectorized_map(calculate_metric_norm, random_points_tensor).numpy()
-
-        # find the index of the minimum norm
-        min_index = np.argmin(norms)
-        min_norm = norms[min_index]
-        min_point = random_points[min_index]
-
-        # print the result of the random search
-        if min_norm < 1e-3:
-            print(f"Found a point with small norm at {min_point} with norm {min_norm} during random search.")
-        else:
-            print("No point with sufficiently small norm found during random search. Smallest norm found during random search: " + str(min_norm))
-    
-        # define the objective function for minimization
+    def find_zero_vector(self):
+        # define the objective function for differential evolution
         def objective_function(x):
             x_tensor = tf.convert_to_tensor(np.expand_dims(x, axis=0), dtype=tf.float64)
             g = self.g(x_tensor)
@@ -260,12 +232,21 @@ class PINN:
             metric_norm = tf.sqrt(metric_norm_squared)
             return tf.squeeze(metric_norm).numpy()
 
-        # perform the minimization starting from the best point found
-        result = minimize(objective_function, min_point, method='Nelder-Mead')
+        # set the bounds for the search space (unit cube)
+        bounds = [(-np.pi, np.pi), (-np.pi, np.pi), (-np.pi, np.pi)]
+
+        # perform Differential Evolution optimization
+        result = differential_evolution(objective_function, bounds)
 
         # get the point with the smallest norm found
-        min_norm_final = result.fun
-        print("Smallest norm found after minimization: " + str(min_norm_final))
+        min_norm = result.fun
+        min_point = result.x
+
+        # print the results
+        print(f"Smallest norm found: {min_norm}")
+        print(f"at point: {min_point}")
+        print(f"verification: {objective_function(min_point)}")
+        return min_point
 
 ###################################################################################################
 # running the program
@@ -274,30 +255,15 @@ if __name__ == '__main__':
     
     # generate collocation points
     num_samples = 1000
-    x_collocation = np.random.uniform(low=0, high=2*np.pi, size=(num_samples, 3))
+    x_collocation = np.random.uniform(low=-np.pi, high=np.pi, size=(num_samples, 3))
     x_collocation = tf.convert_to_tensor(x_collocation, dtype=tf.float64)
 
     # initialise and train network
     pinn = PINN()
     pinn.train(x_collocation, epochs=100, learning_rate=0.001)
-    
-    # check for periodicity (should always be true)
-    inputs = np.array([[np.pi, np.pi, np.pi], [3*np.pi, 3*np.pi, 3*np.pi]], dtype=np.float64)
-    outputs = pinn.evaluate(inputs)
-    print(f"Outputs for [pi, pi, pi] and [3*pi, 3*pi, 3*pi]:\n{outputs.numpy()} (these should be exactly the same if the NN has learnt a periodic solution)")
-
-    # check for constant output (should be true for the identity metric)
-    random_inputs = np.random.uniform(low=0, high=1, size=(5, 3))
-    random_inputs_tensor = tf.convert_to_tensor(random_inputs, dtype=tf.float64)
-    random_outputs = pinn.evaluate(random_inputs_tensor).numpy()
-    print("Random inputs:")
-    print(random_inputs)
-    print("Random outputs:")
-    print(random_outputs)
-    print("(these 5 output vectors should be pretty much the same if the identity metric is used)")
-
-    # plot results
-    pinn.plot_learned_1_form()
 
     # check for zeroes
-    pinn.find_zero_vector()
+    zero = pinn.find_zero_vector()
+
+    # plot results
+    pinn.plot_learned_1_form(zero)

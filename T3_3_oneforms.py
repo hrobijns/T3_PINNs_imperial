@@ -34,27 +34,19 @@ class PINN:
         ])
         
 ###################################################################################################
-# define the metric.
+# define the metric
 
     def g(self,x):
         x = x[0]
+                
+        g11 = 1.0
+        g12 = 0.0
+        g13 = 0.0
+        g22 = 1.0
+        g23 = 0.0
+        g33 = 1.0
         
-        g11 = (x[2]-0.5)**2
-        g12 = 0
-        g13 = 0
-        g22 = 1.9*(x[0]-0.5)**2
-        g23 = 0
-        g33 = 1.9*(x[1]-0.5)**2
-       
-        '''
-        g11 = 1
-        g12 = 0
-        g13 = 0
-        g22 = 1
-        g23 = 0
-        g33 = 1
-         '''
-
+         
         # return the matrix
         g = tf.convert_to_tensor([
             [g11,g12,g13],
@@ -100,10 +92,10 @@ class PINN:
         elif rank_acting_on == 3: # Hodge star acting on a 3-form: output is a 0-form
             sqrt_det_metric = tf.sqrt(tf.abs(tf.linalg.det(g)))
             return sqrt_det_metric * inputs 
-
+    
     def exterior_derivative(self, inputs, x, tape, rank_acting_on):
     # define the exterior derivative, defined differently depending on which rank form it is acting on
-
+        
         if rank_acting_on == 0: # exterior derivative of a 0-form: output is a 1-form
             return tape.gradient(inputs, x) # coefficients of dx1, dx2 and dx3
 
@@ -121,6 +113,7 @@ class PINN:
         ], axis=1)
         
         elif rank_acting_on == 2: # exterior derivative of a 2-form: output is a 3-form
+
             derivatives = tf.concat([
                 tape.gradient(inputs[:, 0], x), 
                 tape.gradient(inputs[:, 1], x),
@@ -130,32 +123,34 @@ class PINN:
             return tf.expand_dims(derivatives[:, 0] - derivatives[:, 4] + derivatives[:, 8], axis=1) 
 
     def calculate_PDE_error(self, x, tape):
-    # function which calculates overall laplacian of the 1-form, as the sum of two terms
+        error = 0
         x = tf.expand_dims(x, axis=0)
         tape.watch(x)
+        metric = self.g(x)
         u = self.model(x)
-        metric = self.g(x)        
-        # 'LH_term': d*d* acting on the 1-form
-        y = self.hodge_star(u, rank_acting_on=1, g=metric)
-        y = self.exterior_derivative(y, x, tape, rank_acting_on=2)
-        y = self.hodge_star(y, rank_acting_on=3, g=metric)
-        LH_term = self.exterior_derivative(y, x, tape, rank_acting_on=0)
+        f1,f2,f3 = tf.expand_dims(u[0, 0], axis=0), tf.expand_dims(u[0, 1], axis=0), tf.expand_dims(u[0, 2], axis=0)
+        f1, f2, f3 = tf.expand_dims(f1, axis=-1), tf.expand_dims(f2, axis=-1),tf.expand_dims(f3, axis=-1)
 
-        # 'RH_term': *d*d acting on the 1-form
-        y = self.exterior_derivative(u, x, tape, rank_acting_on=1)
-        y = self.hodge_star(y, rank_acting_on=2, g=metric)
-        y = self.exterior_derivative(y, x, tape, rank_acting_on=1)
-        RH_term = self.hodge_star(y, rank_acting_on=2, g=metric)
-
-        sum = LH_term + RH_term # sum of these terms is the laplacian of the one-form
-        return tf.reduce_sum(tf.square(sum)) # return mean-squared error
-      
+        for i, f in enumerate([f1, f2, f3]):
+            y = self.exterior_derivative(f, x, tape, rank_acting_on=0)
+            
+            # add 1 to the specific element of df based on the index i
+            if i == 0:  # for f1, add 1 to the first element
+                y = tf.concat([y[:, 0:1] + 1, y[:, 1:2], y[:, 2:3]], axis=1)
+            elif i == 1:  # for f2, add 1 to the second element
+                y = tf.concat([y[:, 0:1], y[:, 1:2] + 1, y[:, 2:3]], axis=1)
+            elif i == 2:  # for f3, add 1 to the third element
+                y = tf.concat([y[:, 0:1], y[:, 1:2], y[:, 2:3] + 1], axis=1)
+            
+            y = self.hodge_star(y, rank_acting_on=1, g=metric)
+            y = self.exterior_derivative(y, x, tape, rank_acting_on=2)
+            error += tf.square(self.hodge_star(y, rank_acting_on=3, g=metric))
+        
+        return error
 
     def loss(self, x_collocation, tape):
         PDE_errors = tf.vectorized_map(lambda x: self.calculate_PDE_error(x, tape), x_collocation)
-        norm_factor = tf.reduce_sum(tf.abs(self.model(x_collocation)))
-        loss = tf.reduce_mean(PDE_errors) / norm_factor
-        return loss
+        return tf.reduce_mean(PDE_errors)
     
 ###################################################################################################
 # train network
@@ -176,60 +171,64 @@ class PINN:
                 print(f"Epoch {epoch}: Loss = {normalised_loss.numpy()}")
 
 ###################################################################################################
-#  simple plot on T^3 to visualise results
+#  plot three one-forms on three axes T^3
 
-    def plot_learned_1_form(self, point):
-        fig = plt.figure()
-        ax = fig.add_subplot(111, projection='3d')
+    def plot_learned_1_forms(self):
+        # set up the 3D cubes
+        fig = plt.figure(figsize=(18, 6))
+            
+        # create a grid of points in the cube [0,1]x[0,1]x[0,1]
+        num_points = 6
+        x_vals = np.linspace(0, 1, num_points)
+        y_vals = np.linspace(0, 1, num_points)
+        z_vals = np.linspace(0, 1, num_points)
+            
+        X, Y, Z = np.meshgrid(x_vals, y_vals, z_vals)
+        points = np.vstack([X.ravel(), Y.ravel(), Z.ravel()]).T
 
-        # make the grid
-        x, y, z = np.meshgrid(np.arange(0, 1.1, 0.2),
-                              np.arange(0, 1.1, 0.2),
-                              np.arange(0, 1.1, 0.2))
-        grid_points = np.stack([x.ravel(), y.ravel(), z.ravel()], axis=-1)
-        grid_tensor = tf.convert_to_tensor(grid_points, dtype=tf.float64)
+        # convert points to tensor
+        points_tensor = tf.convert_to_tensor(points, dtype=tf.float64)
 
-        u = self.evaluate(grid_tensor).numpy()
+        # Get the outputs and their derivatives with respect to inputs
+        with tf.GradientTape(persistent=True) as tape:
+            tape.watch(points_tensor)
+            outputs = self.evaluate(points_tensor)
+            
+            f1_grads = tape.gradient(outputs[:, 0], points_tensor)
+            f2_grads = tape.gradient(outputs[:, 1], points_tensor)
+            f3_grads = tape.gradient(outputs[:, 2], points_tensor)
 
-        # Reshape to match grid
-        u1 = u[:, 0].reshape(x.shape)*0.2
-        u2 = u[:, 1].reshape(x.shape)*0.2
-        u3 = u[:, 2].reshape(x.shape)*0.2
-        ax.quiver(x, y, z, u1, u2, u3, normalize=False)
+        f1_grads_adjusted = tf.concat([f1_grads[:, 0:1] + 1, f1_grads[:, 1:2], f1_grads[:, 2:]], axis=1)
+        f2_grads_adjusted = tf.concat([f2_grads[:, 0:1], f2_grads[:, 1:2] + 1, f2_grads[:, 2:]], axis=1)
+        f3_grads_adjusted = tf.concat([f3_grads[:, 0:1], f3_grads[:, 1:2], f3_grads[:, 2:3] + 1], axis=1)
+            
+        # define a function to plot a 3D vector field
+        def plot_vector_field(ax, grads, title):
+            U = grads[:, 0].numpy().reshape((num_points, num_points, num_points))
+            V = grads[:, 1].numpy().reshape((num_points, num_points, num_points))
+            W = grads[:, 2].numpy().reshape((num_points, num_points, num_points))
+                
+            ax.quiver(X, Y, Z, U, V, W, length=0.1, normalize=True)
+            ax.set_xlim([0, 1])
+            ax.set_ylim([0, 1])
+            ax.set_zlim([0, 1])
+            ax.set_title(title)
+            ax.set_xlabel('x1')
+            ax.set_ylabel('x2')
+            ax.set_zlabel('x3')
+            
+        # Plot the vector fields for f1, f2, and f3 derivatives
+        ax1 = fig.add_axes([0.05, 0.15, 0.25, 0.7], projection='3d')  # [left, bottom, width, height]
+        plot_vector_field(ax1, f1_grads_adjusted, "one-form (a)")
 
-        ax.scatter(point[0], point[1], point[2], color='red', s=10)
-        
+        ax2 = fig.add_axes([0.35, 0.15, 0.25, 0.7], projection='3d')
+        plot_vector_field(ax2, f2_grads_adjusted, "one-form (b)")
+
+        ax3 = fig.add_axes([0.65, 0.15, 0.25, 0.7], projection='3d')
+        plot_vector_field(ax3, f3_grads_adjusted, "one-form (c)")
+            
+        plt.tight_layout()
         plt.show()
-
-###################################################################################################
-# simple check for zeroes: first a random check, then minimise from there.
-
-    def find_zero_vector(self):
-        # define the objective function for differential evolution
-        def objective_function(x):
-            x_tensor = tf.convert_to_tensor(np.expand_dims(x, axis=0), dtype=tf.float64)
-            g = self.g(x_tensor)
-            u = self.evaluate(x_tensor)[0]
-            u = tf.reshape(u, (3, 1))
-            metric_norm_squared = tf.matmul(tf.matmul(tf.transpose(u), g), u)
-            metric_norm = tf.sqrt(metric_norm_squared)
-            return tf.squeeze(metric_norm).numpy()
-
-        # set the bounds for the search space (unit cube)
-        bounds = [(0, 1), (0, 1), (0, 1)]
-
-        # perform Differential Evolution optimization
-        result = differential_evolution(objective_function, bounds)
-
-        # get the point with the smallest norm found
-        min_norm = result.fun
-        min_point = result.x
-
-        # print the results
-        print(f"Smallest norm found: {min_norm}")
-        print(f"at point: {min_point}")
-        print(f"verification: {objective_function(min_point)}")
-        return min_point
 
 ###################################################################################################
 # running the program
@@ -244,24 +243,7 @@ if __name__ == '__main__':
     # initialise and train network
     pinn = PINN()
     pinn.train(x_collocation, epochs=500, learning_rate=0.001)
-    
-    # check for periodicity (should always be true)
-    inputs = np.array([[1, 1, 1], [2, 2, 2]], dtype=np.float64)
-    outputs = pinn.evaluate(inputs)
-    print(f"Outputs for [1, 1, 1] and [2, 2, 2]:\n{outputs.numpy()} (these should be exactly the same if the NN has learnt a periodic solution)")
 
-    # check for constant output (should be true for the identity metric)
-    random_inputs = np.random.uniform(low=0, high=1, size=(5, 3))
-    random_inputs_tensor = tf.convert_to_tensor(random_inputs, dtype=tf.float64)
-    random_outputs = pinn.evaluate(random_inputs_tensor).numpy()
-    print("Random inputs:")
-    print(random_inputs)
-    print("Random outputs:")
-    print(random_outputs)
-    print("(these 5 output vectors should be pretty much the same if the identity metric is used)")
+    # plot results and check for zeros
+    pinn.plot_learned_1_forms()
 
-    # check for zeroes
-    zero = pinn.find_zero_vector()
-
-    # plot results
-    pinn.plot_learned_1_form(zero)
