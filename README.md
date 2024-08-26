@@ -27,9 +27,12 @@ Does there exist a metric on the 3-dimensional torus T<sup>3</sup> such that eve
 - slightly changed the architecture so it calculates loss point by point, which allows the metric to be dependant on the inputs.
 - added a zero checker which seeks for the smallest norm vector.
 
-##### T3_Kerofsky.py (IN PROGRESS):
+##### T3_Kerofsky.py:
 - implemented a 3D extension to a metric set out by [Kerofsky (2)](https://www.researchgate.net/publication/34310555_Harmonic_forms_under_metric_and_topological_perturbations).
 
+##### T3_3_oneforms.py:
+- changed the loss function to instead learn a different equation, which allows the NN to learn the full space of one-forms at the same time.
+- adjusted plotting and zero functions finders to account for the changes.
 
 ## References:
 (1) [Raissi et al., 2017, *Physics Informed Deep Learning (Part I): Data-driven Solutions of Nonlinear Partial Differential Equations*](https://arxiv.org/abs/1711.10561) <br/>
