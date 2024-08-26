@@ -189,7 +189,7 @@ class PINN:
         for epoch in range(epochs):
             normalised_loss, grads = self.compute_loss_and_gradients(x_collocation)
             optimizer.apply_gradients(zip(grads, self.model.trainable_variables))
-            if epoch % 5 == 0:
+            if epoch % 1 == 0:
                 print(f"Epoch {epoch}: Loss = {normalised_loss.numpy()}")
 
 ###################################################################################################
