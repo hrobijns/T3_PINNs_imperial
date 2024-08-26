@@ -200,9 +200,9 @@ class PINN:
         ax = fig.add_subplot(111, projection='3d')
 
         # make the grid
-        x, y, z = np.meshgrid(np.arange(3.2, 3.2, 1),
-                              np.arange(3.2, 3.2, 1),
-                              np.arange(3.2, 3.2, 1))
+        x, y, z = np.meshgrid(np.arange(-3.2, 3.2, 1),
+                              np.arange(-3.2, 3.2, 1),
+                              np.arange(-3.2, 3.2, 1))
         grid_points = np.stack([x.ravel(), y.ravel(), z.ravel()], axis=-1)
         grid_tensor = tf.convert_to_tensor(grid_points, dtype=tf.float64)
 
@@ -260,7 +260,7 @@ if __name__ == '__main__':
 
     # initialise and train network
     pinn = PINN()
-    pinn.train(x_collocation, epochs=100, learning_rate=0.001)
+    pinn.train(x_collocation, epochs=50, learning_rate=0.001)
 
     # check for zeroes
     zero = pinn.find_zero_vector()
