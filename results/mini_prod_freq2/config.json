@@ -1,0 +1,12 @@
+{
+  "n_trials": 12,
+  "epochs": 2000,
+  "lr": 0.001,
+  "tol": 0.001,
+  "pde_tol": 0.05,
+  "n_collocations": 2000,
+  "clipnorm": 1.0,
+  "lr_decay": true,
+  "metric": "FourierMetric",
+  "max_freq": 2
+}
